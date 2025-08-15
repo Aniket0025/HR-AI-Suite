@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -70,24 +70,108 @@ const mockAnalysis = [
   },
 ]
 
+const EMPLOYEES = [
+  { id: "alex-johnson", name: "Alex Johnson", department: "Engineering", role: "Frontend Developer" },
+  { id: "maria-santos", name: "Maria Santos", department: "Marketing", role: "Digital Marketing Specialist" },
+  { id: "john-doe", name: "John Doe", department: "Data", role: "Data Analyst" },
+]
+
 export function SkillGapAnalysis() {
-  const [analyses, setAnalyses] = useState(mockAnalysis)
+  const [analyses, setAnalyses] = useState<any[]>([])
   const [selectedEmployee, setSelectedEmployee] = useState("")
   const [jobDescription, setJobDescription] = useState("")
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const { toast } = useToast()
+  const [currentSkillsInput, setCurrentSkillsInput] = useState("")
+  const [targetRole, setTargetRole] = useState("")
+  const [employeeName, setEmployeeName] = useState("")
+
+  // Load last two analyses from backend
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const token = typeof window !== 'undefined' ? localStorage.getItem("auth_token") : null
+        if (!token) {
+          // Not signed in: show mock
+          setAnalyses(mockAnalysis)
+          return
+        }
+        const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"
+        const res = await fetch(`${base}/api/skills`, { headers: { Authorization: `Bearer ${token}` } })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data?.error || "Failed to load analyses")
+        const list = (data?.items || data?.analyses || data) as any[]
+        const mapped = (list || []).slice(0, 2).map((a) => ({
+          id: a.id || a._id,
+          employeeName: a.employeeName,
+          department: "",
+          role: a.targetRole,
+          currentSkills: a.currentSkills || [],
+          requiredSkills: a.requiredSkills || [],
+          skillGaps: a.gaps || [],
+          recommendations: a.recommendations || [],
+          overallScore: a.overallScore ?? 0,
+        }))
+        if (mapped.length) setAnalyses(mapped)
+        else setAnalyses(mockAnalysis)
+      } catch (e) {
+        // Fallback to mock if API fails
+        setAnalyses(mockAnalysis)
+      }
+    }
+    load()
+  }, [])
 
   const handleAnalyze = async () => {
-    setIsAnalyzing(true)
+    try {
+      setIsAnalyzing(true)
+      const token = typeof window !== 'undefined' ? localStorage.getItem("auth_token") : null
+      if (!token) {
+        toast({ title: "Not signed in", description: "Please sign in to analyze skills." })
+        setIsAnalyzing(false)
+        return
+      }
 
-    // Simulate AI analysis
-    setTimeout(() => {
-      setIsAnalyzing(false)
-      toast({
-        title: "Analysis complete",
-        description: "Skill gaps identified and recommendations generated",
+      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"
+      const currentSkills = currentSkillsInput
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+
+      const body = {
+        employeeName: employeeName || EMPLOYEES.find((e) => e.id === selectedEmployee)?.name || "",
+        currentSkills,
+        targetRole,
+        jobRequirements: jobDescription,
+      }
+
+      const res = await fetch(`${base}/api/skills/analyze`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
       })
-    }, 3000)
+      const data = await res.json()
+      if (!res.ok) throw new Error(data?.error || "Failed to analyze skills")
+
+      const a = data.analysis
+      const ui = {
+        id: a.id,
+        employeeName: a.employeeName || body.employeeName,
+        department: "", // optional
+        role: a.targetRole || targetRole,
+        currentSkills: a.currentSkills || [],
+        requiredSkills: a.requiredSkills || [],
+        skillGaps: a.gaps || [],
+        recommendations: a.recommendations || [],
+        overallScore: a.overallScore ?? 0,
+      }
+      setAnalyses((prev) => [ui, ...prev])
+      toast({ title: "Analysis complete", description: "Saved to your account." })
+    } catch (err: any) {
+      toast({ title: "Analyze failed", description: err?.message || String(err) })
+    } finally {
+      setIsAnalyzing(false)
+    }
   }
 
   const getPriorityColor = (priority: string) => {
@@ -132,26 +216,46 @@ export function SkillGapAnalysis() {
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label>Select Employee</Label>
-                <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
+                <Select
+                  value={selectedEmployee}
+                  onValueChange={(v) => {
+                    setSelectedEmployee(v)
+                    const emp = EMPLOYEES.find((e) => e.id === v)
+                    if (emp) {
+                      setEmployeeName(emp.name)
+                      if (!targetRole) setTargetRole(emp.role)
+                    }
+                  }}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Choose employee to analyze" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="alex-johnson">Alex Johnson - Frontend Developer</SelectItem>
-                    <SelectItem value="maria-santos">Maria Santos - Marketing Specialist</SelectItem>
-                    <SelectItem value="john-doe">John Doe - Data Analyst</SelectItem>
+                    {EMPLOYEES.map((e) => (
+                      <SelectItem key={e.id} value={e.id}>
+                        {e.name} - {e.role}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-2">
                 <Label>Current Skills</Label>
-                <Input placeholder="e.g., React, JavaScript, CSS" />
+                <Input
+                  placeholder="e.g., React, JavaScript, CSS"
+                  value={currentSkillsInput}
+                  onChange={(e) => setCurrentSkillsInput(e.target.value)}
+                />
               </div>
 
               <div className="space-y-2">
                 <Label>Target Role</Label>
-                <Input placeholder="e.g., Senior Frontend Developer" />
+                <Input
+                  placeholder="e.g., Senior Frontend Developer"
+                  value={targetRole}
+                  onChange={(e) => setTargetRole(e.target.value)}
+                />
               </div>
             </div>
 
@@ -242,7 +346,7 @@ export function SkillGapAnalysis() {
                       <div className="flex justify-between items-center mb-2">
                         <div className="flex items-center gap-2">
                           <h4 className="font-medium">{gap.skill}</h4>
-                          <Badge className={getPriorityColor(gap.priority)}>{gap.priority} Priority</Badge>
+                          {/* Priority hidden as requested */}
                         </div>
                         <div className="text-sm text-muted-foreground">
                           {gap.proficiency}% / {gap.required}% required

@@ -7,6 +7,7 @@ import { errorHandler, notFound } from './middleware/error.js'
 import authRoutes from './routes/auth.routes.js'
 import healthRoutes from './routes/health.routes.js'
 import userRoutes from './routes/user.routes.js'
+import skillRoutes from './routes/skill.routes.js'
 
 const app = express()
 
@@ -19,6 +20,7 @@ app.use(morgan('dev'))
 app.use('/api/health', healthRoutes)
 app.use('/api/auth', authRoutes)
 app.use('/api/users', userRoutes)
+app.use('/api/skills', skillRoutes)
 
 // Health root
 app.get('/', (_req, res) => {
