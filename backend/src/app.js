@@ -6,6 +6,7 @@ import { connectDB } from './config/db.js'
 import { errorHandler, notFound } from './middleware/error.js'
 import authRoutes from './routes/auth.routes.js'
 import healthRoutes from './routes/health.routes.js'
+import userRoutes from './routes/user.routes.js'
 
 const app = express()
 
@@ -17,6 +18,7 @@ app.use(morgan('dev'))
 // Routes
 app.use('/api/health', healthRoutes)
 app.use('/api/auth', authRoutes)
+app.use('/api/users', userRoutes)
 
 // Health root
 app.get('/', (_req, res) => {
@@ -39,3 +41,4 @@ await connectDB(MONGODB_URI)
 app.listen(PORT, () => {
   console.log(`[server] Listening on http://localhost:${PORT}`)
 })
+
